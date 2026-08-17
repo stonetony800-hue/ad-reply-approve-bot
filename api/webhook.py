@@ -1,8 +1,9 @@
 import os
+import json
 import requests
+from http.server import BaseHTTPRequestHandler
 
 BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 
@@ -22,64 +23,74 @@ def send_message(chat_id, text, reply_to=None):
     )
 
 
-def handler(request):
-    if request.method != "POST":
-        return {
-            "statusCode": 200,
-            "body": "Ad Reply Approve Bot is running!"
-        }
+class handler(BaseHTTPRequestHandler):
 
-    try:
-        update = request.get_json()
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(
+            b"Ad Reply Approve Bot is running!"
+        )
 
-        # Handle normal messages
-        message = update.get("message")
+    def do_POST(self):
+        try:
+            content_length = int(
+                self.headers.get("Content-Length", 0)
+            )
 
-        if message:
-            chat_id = message["chat"]["id"]
-            message_id = message["message_id"]
-            text = message.get("text", "").strip()
+            body = self.rfile.read(content_length)
+            update = json.loads(body.decode("utf-8"))
 
-            if text == "/start":
-                send_message(
-                    chat_id,
-                    "👋 Welcome!\n\n"
-                    "Send your advertisement here and "
-                    "you will receive an automatic reply."
-                )
+            # Normal bot messages
+            message = update.get("message")
 
-            else:
+            if message:
+                chat_id = message["chat"]["id"]
+                message_id = message["message_id"]
+                text = message.get("text", "").strip()
+
+                if text == "/start":
+                    send_message(
+                        chat_id,
+                        "👋 Welcome to Ad Reply Approve Bot!\n\n"
+                        "Send your advertisement here and "
+                        "you will receive an automatic reply."
+                    )
+
+                else:
+                    send_message(
+                        chat_id,
+                        "✅ Advertisement received!\n\n"
+                        "Your submission has been received "
+                        "and is being reviewed.",
+                        message_id
+                    )
+
+            # Channel posts
+            channel_post = update.get("channel_post")
+
+            if channel_post:
+                chat_id = channel_post["chat"]["id"]
+                message_id = channel_post["message_id"]
+
                 send_message(
                     chat_id,
                     "✅ Advertisement received!\n\n"
-                    "Your submission has been received "
-                    "and is being reviewed.",
+                    "Thank you! Your submission is being "
+                    "reviewed.",
                     message_id
                 )
 
-        # Handle channel posts
-        channel_post = update.get("channel_post")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"OK")
 
-        if channel_post:
-            chat_id = channel_post["chat"]["id"]
-            message_id = channel_post["message_id"]
+        except Exception as error:
+            print("ERROR:", error)
 
-            send_message(
-                chat_id,
-                "✅ Your advertisement has been received.\n\n"
-                "Thank you! Your submission is being reviewed.",
-                message_id
-            )
-
-        return {
-            "statusCode": 200,
-            "body": "OK"
-        }
-
-    except Exception as error:
-        print("ERROR:", error)
-
-        return {
-            "statusCode": 500,
-            "body": "Error"
-        }
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Error")
